@@ -80,6 +80,8 @@ export async function getYoutubeTranscript(videoUrl: string): Promise<string> {
         const text = line
           .replace(/<text.+>/, '')  // Remove the opening tag
           .replace(/&amp;/gi, '&')  // Fix ampersands
+          .replace(/\s*\n\s*/g, ' ')  // Replace newlines with whitespace on either side with a single space
+          .replace(/[\u2018\u2019]/g, "'")  // Replace left and right single quotation marks
           .trim();
 
         // Decode HTML entities but don't strip tags
@@ -87,7 +89,7 @@ export async function getYoutubeTranscript(videoUrl: string): Promise<string> {
       })
       .filter(Boolean); // Remove empty lines
 
-    return lines.join('\n');
+    return lines.join(' '); //return as a long str rather than with \n chara as these dont mean anything. just pauses in the video dialogue
 
   } catch (error) {
     if (error instanceof Error) {

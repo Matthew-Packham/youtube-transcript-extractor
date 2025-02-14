@@ -1,18 +1,76 @@
 import { getYoutubeTranscript } from './yt-scraper.ts';
 import fs from 'fs/promises';
+import path from 'path';
+import Papa from 'papaparse';
 
-async function main(url: string) {
+// Type for our transcript object
+interface TranscriptEntry {
+    ID: string;
+    Title: string;
+    Transcript: string;
+}
+
+async function processVideoList(listFilePath: string, outputFilePath: string) {
+    // Array to store all transcript entries
+    const transcriptEntries: TranscriptEntry[] = [];
+
     try {
-        const videoId = url.match(/[?&]v=([^&]+)/)?.[1] || 'unknown';
-        console.log(`Processing ${videoId}...`);
+
+        // Ensure Transcripts directory exists
+        const transcriptsDir = path.dirname(outputFilePath);
+        await fs.mkdir(transcriptsDir, { recursive: true });
+
+        // Read the list of video data
+        const fileContent = await fs.readFile(listFilePath, 'utf-8');
         
-        const transcript = await getYoutubeTranscript(url);
-        await fs.writeFile(`../Transcripts/transcript-${videoId}.txt`, transcript, 'utf-8');
-        console.log(`✅ Saved to transcript-${videoId}.txt`);
-        
+        // Parse CSV using Papa Parse
+        const parsed = Papa.parse(fileContent, {
+            header: true,
+            skipEmptyLines: true
+        });
+
+        // Process each row
+        for (const row of parsed.data) {
+            const videoId = row['ID']?.replace(/"/g, ''); // Remove quotes if present
+            const title = row['Title']?.replace(/"/g, '');
+            
+            if (videoId) {
+                try {
+                    const url = `https://www.youtube.com/watch?v=${videoId}`;
+                    console.log(`Processing ${videoId}...`);
+                    
+                    // Get transcript
+                    const transcript = await getYoutubeTranscript(url);
+                    
+                    // Create transcript entry
+                    transcriptEntries.push({
+                        ID: videoId,
+                        Title: title || 'Unknown Title',
+                        Transcript: transcript
+                    });
+                    
+                    console.log(`✅ Retrieved transcript for ${videoId}`);
+                } catch (error) {
+                    console.error(`Error processing ${videoId}:`, error instanceof Error ? error.message : error);
+                }
+            }
+        }
+
+        // Write accumulated transcripts to a single JSON file
+        await fs.writeFile(
+            outputFilePath, 
+            JSON.stringify(transcriptEntries, null, 2), 
+            'utf-8'
+        );
+
+        console.log(`✅ All transcripts saved to ${path.basename(outputFilePath)}`);
     } catch (error) {
-        console.error('Error:', error instanceof Error ? error.message : error);
+        console.error('Error processing video list:', error);
     }
 }
-const url = 'https://www.youtube.com/watch?v=qdBavW0x62k' 
-main(url);
+
+// Usage
+const videoListPath = path.join(process.cwd(), '2025_02_14_video_metadata.txt');
+const outputPath = path.join(process.cwd(), 'Transcripts', 'accumulated_transcripts.json');
+
+processVideoList(videoListPath, outputPath);
